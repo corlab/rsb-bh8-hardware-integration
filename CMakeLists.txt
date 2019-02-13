@@ -36,7 +36,8 @@ set(CMAKE_BUILD_TYPE Release)
 
 find_package(RSB REQUIRED)
 find_package(RST REQUIRED) # for data types
-
+SET(Boost_USE_STATIC_LIBS ON)
+find_package(Boost COMPONENTS log required)
 
 add_definitions(${RST_CFLAGS})
 
@@ -46,7 +47,8 @@ include_directories(SYSTEM
                     ${RST_INCLUDE_DIRS} 
 		    ~/.local/include/
 		    ~/.local/include/BHand
-		    /usr/include/)
+		    /usr/include/ 
+		    Boost_INCLUDE_DIR)
 link_directories(${RSB_LIBRARY_DIRS}
                  ${RST_LIBRARY_DIRS}
 		~/.local/lib/)
@@ -55,7 +57,7 @@ ADD_DEFINITIONS(-DLINUX)
 set(PROGRAM_NAME rsb-bh8-interface)
 add_executable(${PROGRAM_NAME} src/rsb-bh8-interface.cpp)
 target_link_libraries(${PROGRAM_NAME} ${RSB_LIBRARIES}
-                                      ${RST_LIBRARIES} BHand pcan ctb-0.14 PocoFoundation)
+                                      ${RST_LIBRARIES} BHand pcan ctb-0.14 PocoFoundation ${Boost_LOG_LIBRARY})
 
 install(TARGETS ${PROGRAM_NAME}
         RUNTIME DESTINATION bin)
