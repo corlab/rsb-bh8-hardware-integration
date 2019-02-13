@@ -43,14 +43,19 @@ add_definitions(${RST_CFLAGS})
 include_directories(SYSTEM
                     src
                     ${RSB_INCLUDE_DIRS}
-                    ${RST_INCLUDE_DIRS})
+                    ${RST_INCLUDE_DIRS} 
+		    ~/.local/include/
+		    ~/.local/include/BHand
+		    /usr/include/)
 link_directories(${RSB_LIBRARY_DIRS}
-                 ${RST_LIBRARY_DIRS})
+                 ${RST_LIBRARY_DIRS}
+		~/.local/lib/)
+ADD_DEFINITIONS(-DLINUX)
 
 set(PROGRAM_NAME rsb-bh8-interface)
 add_executable(${PROGRAM_NAME} src/rsb-bh8-interface.cpp)
 target_link_libraries(${PROGRAM_NAME} ${RSB_LIBRARIES}
-                                      ${RST_LIBRARIES})
+                                      ${RST_LIBRARIES} BHand pcan ctb-0.14 PocoFoundation)
 
 install(TARGETS ${PROGRAM_NAME}
         RUNTIME DESTINATION bin)
