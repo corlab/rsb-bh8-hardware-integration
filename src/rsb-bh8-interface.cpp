@@ -43,7 +43,7 @@ const double J2_RATIO = 125.0;
 const double J2_ENCODER_RATIO = 50.0;
 const double J3_RATIO = 375.0;
 const double SPREAD_RATIO = 17.5;
-
+std::string command;
 // Pucks are the onboard motor controllers
 const int MAX_PUCK_TORQUE = 8191; // max permissible torque
 
@@ -137,7 +137,7 @@ void closeGrasp(){
 	char motor[4] = "123";
 	//	bh.Close(motor);
 	result = bh.Command("GC");
-	std::cout << result << std::endl;
+	std::cout << "closing result: " << result << std::endl;
 	if (result)
 		Error();
 	//	return 0;
@@ -147,7 +147,7 @@ void openGrasp(){
 	result = bh.Command("GO");
 	if (result)
 		Error();
-	std::cout << result << std::endl;
+	std::cout << "opening result: " << result << std::endl;
 	//	return 0;
 }
 
@@ -155,13 +155,19 @@ void receiveCommands(boost::shared_ptr<std::string> e){
 	std::cout << "RECEIVED EVENT" << *e << std::endl;
 	if (*e == "open"){
 		BOOST_LOG_TRIVIAL(info) << "----- opening -----\n";
-		openGrasp();}
+		//openGrasp();
+		command = *e;
+}
 	else if (*e =="close"){
 		BOOST_LOG_TRIVIAL(info) << "----- closing hands -----\n";
-		closeGrasp();}
+		command = *e;
+		//closeGrasp();
+}
 	else if (*e == "deactivate"){ 
 		BOOST_LOG_TRIVIAL(info) << "----- deactivate ----- \n";
-		After();}
+		//After();
+		command = *e;
+}
 
 }
 
@@ -218,12 +224,30 @@ int main(int argc, char *argv[])
 
 	while (UnbufferedGetChar() == EOF)
 	{
+	//	BOOST_LOG_TRIVIAL(info) << "Getting FT data";
 		bh.RTGetFT(f,t);
-		//printf("Force: %7.3f %7.3f %7.3f \n", f[0], f[1], f[2]);
-		//printf("Torque: %7.3f %7.3f %7.3f \n", t[0], t[1], t[2]);
+	//	BOOST_LOG_TRIVIAL(info) << "Received FT data";
+		
+		if (command == "open"){
+			BOOST_LOG_TRIVIAL(info) << "----- opening -----\n";
+			command = "";
+			openGrasp();
+		}
+		else if (command =="close"){
+			BOOST_LOG_TRIVIAL(info) << "----- closing hands -----\n";
+			command = "";
+			closeGrasp();
+		}
+		else if (command == "deactivate"){ 
+			BOOST_LOG_TRIVIAL(info) << "----- deactivate ----- \n";
+			command="";
+			After();
+		}
+		//	printf("Force: %7.3f %7.3f %7.3f \n", f[0], f[1], f[2]);
+	//	printf("Torque: %7.3f %7.3f %7.3f \n", t[0], t[1], t[2]);
 		//bh.RTGetA(a);     // get acceleration from the FT sensor
 		//printf("Acceleration %7.3f %7.3f %7.3f\n", a[0], a[1], a[2]);
-		usleep(microseconds);
+	//	usleep(microseconds);
 		forces->set_x(f[0]);
 		forces->set_y(f[1]);
 		forces->set_z(f[2]);
