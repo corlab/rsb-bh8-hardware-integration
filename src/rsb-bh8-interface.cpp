@@ -62,7 +62,7 @@ void Error()
 ///////////////////////////////////////////////////////////
 //  Initialize hand, set timeouts and baud rate          //
 ///////////////////////////////////////////////////////////
-void Initialize()
+void Initialize(std::string dev)
 {
 	// Set hardware description before initialization
 	// we have a BH8-282, which is identical to the BH8-280 except that the base is smaller
@@ -82,7 +82,7 @@ void Initialize()
 		printf("No config found\n");
 	}
 
-	if (result = handInitWithMenu(&bh, "/dev/pcanusb32"))
+	if (result = handInitWithMenu(&bh, dev))
 		Error();
 
 	BOOST_LOG_TRIVIAL(info) << "Initialization...";
@@ -170,8 +170,13 @@ void receiveCommands(boost::shared_ptr<std::string> e){
 int main(int argc, char *argv[])
 {
 
+
+	if (argc < 4){
+	std::cout << "usage: /scope/listener /scope/informer /dev/usb " << std::endl;
+	return 1;
+	}
 	BOOST_LOG_TRIVIAL(info) << "\n\n\r\t\tInitializing Software...\n";
-	Initialize(); // initializes the hardware
+	Initialize(argv[3]); // initializes the hardware
 
 	PrepareRealTime();
 
