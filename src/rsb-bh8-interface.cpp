@@ -18,6 +18,7 @@
 #include <rsb/converter/Repository.h>
 #include <rsb/converter/ProtocolBufferConverter.h>
 
+
 // See ../CMakeLists.txt for the generation of this file.
 // The generated file can be found in ${BUILD_DIR}/protobuf_converter
 #include <rst/dynamics/Wrench.pb.h>
@@ -132,45 +133,33 @@ int After()
 	return 0;
 }
 
-void closeGrasp(){
-
-	char motor[4] = "123";
+void closeGrasp() {
+	// char motor[4] = "123";
 	//	bh.Close(motor);
 	result = bh.Command("GC");
-	std::cout << "closing result: " << result << std::endl;
 	if (result)
 		Error();
-	//	return 0;
 }
 
-void openGrasp(){
+void openGrasp() {
 	result = bh.Command("GO");
 	if (result)
 		Error();
-	std::cout << "opening result: " << result << std::endl;
-	//	return 0;
 }
 
 void receiveCommands(boost::shared_ptr<std::string> e){
 	std::cout << "RECEIVED EVENT" << *e << std::endl;
 	if (*e == "open"){
 		BOOST_LOG_TRIVIAL(info) << "----- opening -----\n";
-		//openGrasp();
 		command = *e;
-}
-	else if (*e =="close"){
+	} else if (*e =="close"){
 		BOOST_LOG_TRIVIAL(info) << "----- closing hands -----\n";
 		command = *e;
-		//closeGrasp();
-}
-	else if (*e == "deactivate"){ 
+	} else if (*e == "deactivate"){ 
 		BOOST_LOG_TRIVIAL(info) << "----- deactivate ----- \n";
-		//After();
 		command = *e;
+	}
 }
-
-}
-
 
 
 int main(int argc, char *argv[])
@@ -188,6 +177,7 @@ int main(int argc, char *argv[])
 
 	bh.RTStart("GS", BHMotorTorqueLimitProtect);
 	bh.RTUpdate();
+
 	//    bh.RTAbort();
 	boost::shared_ptr< rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench> >
 		converter(new rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench>());
@@ -195,9 +185,7 @@ int main(int argc, char *argv[])
 
 	boost::shared_ptr < rst::dynamics::Wrench > wrench = boost::shared_ptr< rst::dynamics::Wrench > (new rst::dynamics::Wrench());
 
-
-
-	rsc::misc::initSignalWaiter();
+	// rsc::misc::initSignalWaiter();
 
 	Factory& factory = getFactory();
 	Scope scope((argc >1) ? argv[1] : "/bhand/listener");
@@ -208,7 +196,7 @@ int main(int argc, char *argv[])
 	BOOST_LOG_TRIVIAL(info) << "Finished adding handlers\n";
 
 	Informer<rst::dynamics::Wrench>::Ptr informer = factory.createInformer<rst::dynamics::Wrench>(informer_scope);
-	bh.RTTareFT(); // To calibrate
+	bh.RTTareFT(); // To calibrate TODO make this a call/listener over rsb
 	BOOST_LOG_TRIVIAL(info) << "Finished calibration\n";
 
 
@@ -220,13 +208,12 @@ int main(int argc, char *argv[])
 	double t[3]; //torque from ForceTorque sensor
 	double a[3]; //acceleration from ..
 	unsigned int microseconds = 1500000; //sleep needed for work in vm
-	BOOST_LOG_TRIVIAL(info) << "Press Enter and ctrl+c to stop the program";
+	BOOST_LOG_TRIVIAL(info) << "Press Enter??? and ctrl+c to stop the program";
 
 	while (UnbufferedGetChar() == EOF)
 	{
 	//	BOOST_LOG_TRIVIAL(info) << "Getting FT data";
 		bh.RTGetFT(f,t);
-	//	BOOST_LOG_TRIVIAL(info) << "Received FT data";
 		
 		if (command == "open"){
 			BOOST_LOG_TRIVIAL(info) << "----- opening -----\n";
@@ -262,7 +249,6 @@ int main(int argc, char *argv[])
 
 	BOOST_LOG_TRIVIAL(info) << "Stopping program";
 	After();
-	return rsc::misc::suggestedExitCode(rsc::misc::waitForSignal());
-
-
+	// return rsc::misc::suggestedExitCode(rsc::misc::waitForSignal());
+	return 0;
 }

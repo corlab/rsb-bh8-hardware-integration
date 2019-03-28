@@ -45,13 +45,13 @@ include_directories(SYSTEM
                     src
                     ${RSB_INCLUDE_DIRS}
                     ${RST_INCLUDE_DIRS} 
-		    ~/.local/include/
-		    ~/.local/include/BHand
+		    ${CMAKE_PREFIX_PATH}/include/
+		    ${CMAKE_PREFIX_PATH}/include/BHand
 		    /usr/include/ 
 		    Boost_INCLUDE_DIR)
 link_directories(${RSB_LIBRARY_DIRS}
                  ${RST_LIBRARY_DIRS}
-		~/.local/lib/)
+		${CMAKE_PREFIX_PATH}/lib/)
 ADD_DEFINITIONS(-DLINUX)
 
 set(PROGRAM_NAME rsb-bh8-interface)
