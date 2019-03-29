@@ -59,6 +59,8 @@
 #include <rst/dynamics/Torques.pb.h>
 #include <rst/dynamics/Forces.pb.h>
 
+#include <signal.h>
+
 namespace cosima
 {
 
@@ -84,6 +86,7 @@ public:
   void openGrasp();
   void receiveCommands(boost::shared_ptr<std::string> e);
   void LoopBlocking();
+  void SigHandler(int s);
 
   /* VERY UNSAFE ACCESS, I HOPE YOU KNOW WHAT YOU ARE DOING WHEN YOU TRY TO CHANGE SOMETHING! */
   BHand bh; // Handles all hand communication

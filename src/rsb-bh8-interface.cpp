@@ -43,6 +43,8 @@ RsbBH8Interface::RsbBH8Interface()
 
 RsbBH8Interface::~RsbBH8Interface()
 {
+	// active = false;
+	// ShuttingDown();
 }
 
 void RsbBH8Interface::Error(int result, bool exit_program)
@@ -247,6 +249,17 @@ void RsbBH8Interface::LoopBlocking()
 	BOOST_LOG_TRIVIAL(info) << "Exiting Loop.";
 }
 
+void RsbBH8Interface::SigHandler(int s) {
+           printf("Caught signal %d\n",s);
+           active=false;
+}
+
+std::function<void(int)> callback_wrapper;
+void callback_function(int value)
+{
+  callback_wrapper(value);
+}
+
 int main(int argc, char *argv[])
 {
 	if (argc < 4)
@@ -283,6 +296,16 @@ int main(int argc, char *argv[])
 
 	hand.bh.RTStart("GS", BHMotorTorqueLimitProtect);
 	hand.bh.RTUpdate();
+
+	callback_wrapper = std::bind(&RsbBH8Interface::SigHandler,
+                                 &hand,
+                                 std::placeholders::_1);
+
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = callback_function;
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+    sigaction(SIGINT, &sigIntHandler, NULL);
 
 	hand.LoopBlocking();
 
