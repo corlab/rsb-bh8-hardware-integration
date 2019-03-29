@@ -1,108 +1,109 @@
+/* ============================================================
+ *
+ * This file is a part of the RSB BH8 Hardware Integration (CoSiMA) project
+ *
+ * Copyright (C) 2019 by Dennis Leroy Wigand <dwigand at techfak dot uni-bielefeld dot de>,
+ *                       Sebastian Schneider <sebschne at technfak dot uni-bielefeld dot de>
+ *                    based on work of
+ *                       Jens Kober,
+ *                       Michael Gienger
+ *
+ * This file may be licensed under the terms of the
+ * GNU Lesser General Public License Version 3 (the ``LGPL''),
+ * or (at your option) any later version.
+ *
+ * Software distributed under the License is distributed
+ * on an ``AS IS'' basis, WITHOUT WARRANTY OF ANY KIND, either
+ * express or implied. See the LGPL for the specific language
+ * governing rights and limitations.
+ *
+ * You should have received a copy of the LGPL along with this
+ * program. If not, go to http://www.gnu.org/licenses/lgpl.html
+ * or write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
+ * The development of this software was supported by:
+ *   CoR-Lab, Research Institute for Cognition and Robotics
+ *     Bielefeld University
+ *
+ * ============================================================ */
+
 #include "rsb-bh8-interface.hpp"
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <boost/log/trivial.hpp>
-#include <string.h>
-#include <deque>
-#include "BHand.h"
-#include "BHandAppHelper.h" // for connection menu
-#include <sys/time.h>       // Needed for ms time.
-#include <time.h>           // Needed for ms time.
-#include <iostream>
-#include <rsc/misc/SignalWaiter.h>
-#include <rsb/Handler.h>
-#include <rsb/Listener.h>
-#include <rsb/Factory.h>
-#include <unistd.h>
-#include <rsb/converter/Repository.h>
-#include <rsb/converter/ProtocolBufferConverter.h>
 
-
-// See ../CMakeLists.txt for the generation of this file.
-// The generated file can be found in ${BUILD_DIR}/protobuf_converter
-#include <rst/dynamics/Wrench.pb.h>
-
-#include <rst/dynamics/Torques.pb.h>
-#include <rst/dynamics/Forces.pb.h>
-
-using namespace rsb;
-
-BHand bh; // Handles all hand communication
-char buf[100]; // Buffer for reading back hand parameters
-int value;     // Some commands use an int* instead of
-// a buffer to relay information
-
-int result; // Return value (error) of all BHand calls
-
-bool deactivate_bool = false;
+// using namespace rsb;
+using namespace cosima;
 
 #define MAX_PPS_ELEMENTS 24
 
-// ratios needed to convert from encoder counts to radians of the various joints
-const double J2_RATIO = 125.0;
-const double J2_ENCODER_RATIO = 50.0;
-const double J3_RATIO = 375.0;
-const double SPREAD_RATIO = 17.5;
-std::string command;
-// Pucks are the onboard motor controllers
-const int MAX_PUCK_TORQUE = 8191; // max permissible torque
-
-// Encoder counts per motor revolution. Can be read directly for each joint by calling bh.Get("GS", "CTS", &temp);
-const int cts = 4096;
-
-const double rpc = 2. * M_PI / cts;   // radians per count
-const double cpr = cts / (2. * M_PI); // counts per radian
-
-void Error()
+RsbBH8Interface::RsbBH8Interface()
 {
-	printf("ERROR: %d\n%s\n", result, bh.ErrorMessage(result));
-	exit(0);
+	wrench = boost::shared_ptr<rst::dynamics::Wrench>(new rst::dynamics::Wrench());
+	active = true;
 }
 
-///////////////////////////////////////////////////////////
-//  Initialize hand, set timeouts and baud rate          //
-///////////////////////////////////////////////////////////
-void Initialize(std::string dev)
+RsbBH8Interface::~RsbBH8Interface()
 {
-	// Set hardware description before initialization
-	// we have a BH8-282, which is identical to the BH8-280 except that the base is smaller
-	// the library only knows the older BH8-280 but seems to work fine
+}
+
+void RsbBH8Interface::Error(int result, bool exit_program)
+{
+	BOOST_LOG_TRIVIAL(error) << "ERROR: " << result << ", MSG: " << bh.ErrorMessage(result);
+	if (exit_program)
+	{
+		exit(-1);
+	}
+}
+
+bool RsbBH8Interface::Initialize(std::string dev)
+{
+	int result;
+
 	int hwIndex = BHandHardware::getBHandHardwareIndex("BH8-280");
 	if (hwIndex < 0)
 	{
-		printf("\n\nThe API has not been compiled to include target hand.\n");
-		Error();
+		BOOST_LOG_TRIVIAL(error) << "The API has not been compiled to include the BH8-280 hand.";
+		Error(result);
+		return false;
 	}
-	printf("hwIndex 1: %d\n", hwIndex);
+	// printf("hwIndex 1: %d\n", hwIndex);
 	bh.setHardwareDesc(hwIndex);
-	printf("hwIndex 2: %d\n", hwIndex);
+	// printf("hwIndex 2: %d\n", hwIndex);
 	bool use280Config = (strcmp(bh.getHardwareDesc()->getModelNumber(), "BH8-280") == 0);
 	if (!use280Config)
 	{
-		printf("No config found\n");
+		BOOST_LOG_TRIVIAL(warning) << "No config found.";
 	}
 
 	if (result = handInitWithMenu(&bh, dev))
-		Error();
+	{
+		Error(result);
+		return false;
+	}
 
 	BOOST_LOG_TRIVIAL(info) << "Initialization...";
 	if (result = bh.InitHand(""))
-		Error();
+	{
+		Error(result);
+		return false;
+	}
 	else
-		BOOST_LOG_TRIVIAL(info) << " Done\n";
+	{
+		BOOST_LOG_TRIVIAL(info) << "Initialization... Done";
+	}
+	return true;
 }
 
-///////////////////////////////////////////////////////////
-//  Set parameters, prepare data buffers                 //
-///////////////////////////////////////////////////////////
-void PrepareRealTime()
+bool RsbBH8Interface::PrepareRealTime()
 {
+	int result;
 	// initialize everything in velocity control mode
 	// aslo sets which sensors are read out each cycle
 	// see API/BHandSupervisoryRealTime.cpp
 	if (result = bh.RTSetFlags("SG", 1, 3, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0))
-		Error();
+	{
+		Error(result);
+		return false;
+	}
 	sprintf(buf, "%s", "");
 
 	// set spread to position mode
@@ -111,130 +112,129 @@ void PrepareRealTime()
 	bh.Set("S", "LCP", 1); // LCP (loop control position) true
 
 	// "LCT" is the equivalent call for torques, see API/BHandBH8_280.cpp for a list
+	return true;
 }
 
-
-int After()
+int RsbBH8Interface::ShuttingDown()
 {
-
-	printf("DEACTIVATING THE HAND");	
+	int result;
+	BOOST_LOG_TRIVIAL(info) << "Shutting down.";
 	if (result = bh.Command("GO")) // open all fingers
-		Error();                   //print error message
-	// this just checks for the key press and could be removed
-	if (UnbufferedGetChar() != EOF)
-		return 1;
+		Error(result);			   //print error message
 
 	if (result = bh.Command("T")) // terminate all motors
-		Error();
-	if (UnbufferedGetChar() != EOF)
-		return 1;
+		Error(result);
+
 	DELAY(1);
 
 	return 0;
 }
 
-void closeGrasp() {
+void RsbBH8Interface::closeGrasp()
+{
+	int result;
 	// char motor[4] = "123";
 	//	bh.Close(motor);
 	result = bh.Command("GC");
 	if (result)
-		Error();
+		Error(result);
 }
 
-void openGrasp() {
+void RsbBH8Interface::openGrasp()
+{
+	int result;
 	result = bh.Command("GO");
 	if (result)
-		Error();
+		Error(result);
 }
 
-void receiveCommands(boost::shared_ptr<std::string> e){
-	std::cout << "RECEIVED EVENT" << *e << std::endl;
-	if (*e == "open"){
-		BOOST_LOG_TRIVIAL(info) << "----- opening -----\n";
-		command = *e;
-	} else if (*e =="close"){
-		BOOST_LOG_TRIVIAL(info) << "----- closing hands -----\n";
-		command = *e;
-	} else if (*e == "deactivate"){ 
-		BOOST_LOG_TRIVIAL(info) << "----- deactivate ----- \n";
-		command = *e;
-	}
-}
-
-
-int main(int argc, char *argv[])
+void RsbBH8Interface::receiveCommands(boost::shared_ptr<std::string> e)
 {
-
-
-	if (argc < 4){
-	std::cout << "usage: /scope/listener /scope/informer /dev/usb " << std::endl;
-	return 1;
+	if (*e == "open")
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- opening hand -----\n";
+		command = *e;
 	}
-	BOOST_LOG_TRIVIAL(info) << "\n\n\r\t\tInitializing Software...\n";
-	Initialize(argv[3]); // initializes the hardware
+	else if (*e == "close")
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- closing hand -----\n";
+		command = *e;
+	}
+	else if (*e == "deactivate")
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- deactivate hand ----- \n";
+		command = *e;
+	}
+	else if (*e == "tare")
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- taring F/T ----- \n";
+		command = *e;
+	}
+}
 
-	PrepareRealTime();
+bool RsbBH8Interface::InitializeRSB(std::string commandListenerScope, std::string wrenchInformerScope)
+{
+	BOOST_LOG_TRIVIAL(info) << "Initializing RSB Interface...";
 
-	bh.RTStart("GS", BHMotorTorqueLimitProtect);
-	bh.RTUpdate();
-
-	//    bh.RTAbort();
-	boost::shared_ptr< rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench> >
-		converter(new rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench>());
+	boost::shared_ptr<rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench> /* */> converter(new rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench>());
 	rsb::converter::converterRepository<std::string>()->registerConverter(converter);
 
-	boost::shared_ptr < rst::dynamics::Wrench > wrench = boost::shared_ptr< rst::dynamics::Wrench > (new rst::dynamics::Wrench());
+	rsb::Factory &factory = rsb::getFactory();
 
-	// rsc::misc::initSignalWaiter();
+	rsb::Scope scope(commandListenerScope);
+	listener = factory.createListener(scope);
+	listener->addHandler(rsb::HandlerPtr(new rsb::DataFunctionHandler<std::string>(boost::bind(&RsbBH8Interface::receiveCommands, this, _1))));
 
-	Factory& factory = getFactory();
-	Scope scope((argc >1) ? argv[1] : "/bhand/listener");
-	std::string informer_scope = (argc >2) ? argv[2] : "/bhand/informer/wrench";
-	ListenerPtr listener = factory.createListener(scope);
-	 BOOST_LOG_TRIVIAL(info) << "Adding handlers ...\n";
-	listener->addHandler(HandlerPtr(new DataFunctionHandler<std::string> (&receiveCommands)));
-	BOOST_LOG_TRIVIAL(info) << "Finished adding handlers\n";
+	informer = factory.createInformer<rst::dynamics::Wrench>(wrenchInformerScope);
 
-	Informer<rst::dynamics::Wrench>::Ptr informer = factory.createInformer<rst::dynamics::Wrench>(informer_scope);
-	bh.RTTareFT(); // To calibrate TODO make this a call/listener over rsb
-	BOOST_LOG_TRIVIAL(info) << "Finished calibration\n";
+	BOOST_LOG_TRIVIAL(info) << "Initializing RSB Interface... Done";
+	return true;
+}
 
-
-	BOOST_LOG_TRIVIAL(info)<<"Publishing ft-data on " << informer_scope;
-	rst::dynamics::Forces* forces = wrench->mutable_forces();
-
-	rst::dynamics::Torques* torques = wrench->mutable_torques();
+void RsbBH8Interface::LoopBlocking()
+{
+	BOOST_LOG_TRIVIAL(info) << "Entering Loop.";
+	rst::dynamics::Forces *forces = wrench->mutable_forces();
+	rst::dynamics::Torques *torques = wrench->mutable_torques();
 	double f[3]; //force from ForceTorque sensor
 	double t[3]; //torque from ForceTorque sensor
-	double a[3]; //acceleration from ..
-	unsigned int microseconds = 1500000; //sleep needed for work in vm
-	BOOST_LOG_TRIVIAL(info) << "Press Enter??? and ctrl+c to stop the program";
+	double a[3]; //acceleration from ForceTorque sensor
+	// unsigned int microseconds = 1500000; //sleep needed for work in vm
 
-	while (UnbufferedGetChar() == EOF)
+	while (active)
 	{
-	//	BOOST_LOG_TRIVIAL(info) << "Getting FT data";
-		bh.RTGetFT(f,t);
-		
-		if (command == "open"){
+		if (command == "tare")
+		{
+			BOOST_LOG_TRIVIAL(info) << "----- taring -----\n";
+			command = "";
+			bh.RTTareFT(); // To calibrate
+		}
+		else if (command == "open")
+		{
 			BOOST_LOG_TRIVIAL(info) << "----- opening -----\n";
 			command = "";
 			openGrasp();
 		}
-		else if (command =="close"){
+		else if (command == "close")
+		{
 			BOOST_LOG_TRIVIAL(info) << "----- closing hands -----\n";
 			command = "";
 			closeGrasp();
 		}
-		else if (command == "deactivate"){ 
+		else if (command == "deactivate")
+		{
 			BOOST_LOG_TRIVIAL(info) << "----- deactivate ----- \n";
-			command="";
-			After();
+			command = "";
+			active = false;
+			break;
 		}
+
+		bh.RTGetFT(f, t);
 		//	printf("Force: %7.3f %7.3f %7.3f \n", f[0], f[1], f[2]);
-	//	printf("Torque: %7.3f %7.3f %7.3f \n", t[0], t[1], t[2]);
+		//	printf("Torque: %7.3f %7.3f %7.3f \n", t[0], t[1], t[2]);
 		//bh.RTGetA(a);     // get acceleration from the FT sensor
 		//printf("Acceleration %7.3f %7.3f %7.3f\n", a[0], a[1], a[2]);
-	//	usleep(microseconds);
+		//	usleep(microseconds);
 		forces->set_x(f[0]);
 		forces->set_y(f[1]);
 		forces->set_z(f[2]);
@@ -242,13 +242,56 @@ int main(int argc, char *argv[])
 		torques->set_a(t[0]);
 		torques->set_b(t[1]);
 		torques->set_c(t[2]);
-		informer->publish(wrench);	
-	}		
+		informer->publish(wrench);
+	}
+	BOOST_LOG_TRIVIAL(info) << "Exiting Loop.";
+}
 
+int main(int argc, char *argv[])
+{
+	if (argc < 4)
+	{
+		std::cout << "usage: /scope/listener/cmd /scope/informer/wrench /dev/usb " << std::endl;
+		return 1;
+	}
+	BOOST_LOG_TRIVIAL(info) << "Initializing BH8 Interface...";
 
+	RsbBH8Interface hand;
 
-	BOOST_LOG_TRIVIAL(info) << "Stopping program";
-	After();
+	// initializes the hardware
+	if (!hand.Initialize(argv[3]))
+	{
+		// TODO deactivate hand or in destructor
+		return -1;
+	}
+
+	if (!hand.PrepareRealTime())
+	{
+		// TODO deactivate hand or in destructor
+		return -1;
+	}
+
+	BOOST_LOG_TRIVIAL(info) << "Initializing BH8 Interface... Done";
+
+	std::string listener_scope = (argc > 1) ? argv[1] : "/bhand/listener";
+	std::string informer_scope = (argc > 2) ? argv[2] : "/bhand/informer/wrench";
+	if (!hand.InitializeRSB(listener_scope, informer_scope))
+	{
+		// TODO deactivate hand or in destructor
+		return -1;
+	}
+
+	hand.bh.RTStart("GS", BHMotorTorqueLimitProtect);
+	hand.bh.RTUpdate();
+
+	hand.LoopBlocking();
+
+	// hand.bh.RTAbort();
+
+	if (hand.ShuttingDown() != 0)
+	{
+		return 1;
+	}
 	// return rsc::misc::suggestedExitCode(rsc::misc::waitForSignal());
 	return 0;
 }
