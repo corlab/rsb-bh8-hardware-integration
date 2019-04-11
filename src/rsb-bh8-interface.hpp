@@ -61,6 +61,8 @@
 
 #include <signal.h>
 
+#include "filter/butterworth.h"
+
 namespace cosima
 {
 
@@ -115,6 +117,10 @@ private:
   boost::shared_ptr<rst::dynamics::Wrench> wrench;
 
   std::atomic<bool> active;
+
+  std::vector<std::shared_ptr<Butterworth<double>>> ft_filters_;
+  std::vector<double> ft_cutoff_;
+  double f_cut_off, t_cut_off;
 };
 
 } // namespace cosima

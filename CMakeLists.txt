@@ -47,6 +47,7 @@ add_definitions(${RST_CFLAGS})
 
 include_directories(SYSTEM
                     src
+                    src/filter
                     ${RSB_INCLUDE_DIRS}
                     ${RST_INCLUDE_DIRS} 
 		    ${CMAKE_PREFIX_PATH}/include/
@@ -59,7 +60,7 @@ link_directories(${RSB_LIBRARY_DIRS}
 ADD_DEFINITIONS(-DLINUX)
 
 set(PROGRAM_NAME rsb-bh8-interface)
-add_executable(${PROGRAM_NAME} src/rsb-bh8-interface.cpp)
+add_executable(${PROGRAM_NAME} src/rsb-bh8-interface.cpp src/filter/butterworth_solver.c)
 target_link_libraries(${PROGRAM_NAME} ${RSB_LIBRARIES}
                                       ${RST_LIBRARIES} BHand pcan ctb-0.14 PocoFoundation ${Boost_LOG_LIBRARY})
 

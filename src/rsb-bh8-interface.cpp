@@ -35,10 +35,28 @@ using namespace cosima;
 
 #define MAX_PPS_ELEMENTS 24
 
-RsbBH8Interface::RsbBH8Interface()
+RsbBH8Interface::RsbBH8Interface() : f_cut_off(10.0), t_cut_off(10.0)
 {
 	wrench = boost::shared_ptr<rst::dynamics::Wrench>(new rst::dynamics::Wrench());
 	active = true;
+
+	// add filters
+	ft_cutoff_.clear();
+	ft_cutoff_.resize(6);
+	ft_filters_.clear();
+	ft_filters_.resize(6);
+	for (unsigned i = 0; i < 6; i++)
+	{
+		if (i < 3)
+		{
+			ft_cutoff_[i] = f_cut_off;
+		}
+		else
+		{
+			ft_cutoff_[i] = t_cut_off;
+		}
+		ft_filters_[i] = std::shared_ptr<Butterworth<double>>(new Butterworth<double>(2, ft_cutoff_[i]));
+	}
 }
 
 RsbBH8Interface::~RsbBH8Interface()
@@ -122,7 +140,7 @@ int RsbBH8Interface::ShuttingDown()
 	int result;
 	BOOST_LOG_TRIVIAL(info) << "Shutting down.";
 	if (result = bh.Command("GO")) // open all fingers
-		Error(result);			   //print error message
+		Error(result);							 //print error message
 
 	if (result = bh.Command("T")) // terminate all motors
 		Error(result);
@@ -171,6 +189,20 @@ void RsbBH8Interface::receiveCommands(boost::shared_ptr<std::string> e)
 	{
 		BOOST_LOG_TRIVIAL(info) << "----- taring F/T ----- \n";
 		command = *e;
+	}
+	else if (*e == "f_cut_off ")
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- f_cut_off " << f_cut_off << " ----- \n";
+		std::string value = (*e).substr(10, (*e).size() - 1);
+		f_cut_off = stod(value);
+		command = "force_cut_off_update";
+	}
+	else if (*e == "t_cut_off ")
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- t_cut_off " << t_cut_off << " ----- \n";
+		std::string value = (*e).substr(10, (*e).size() - 1);
+		t_cut_off = stod(value);
+		command = "torque_cut_off_update";
 	}
 }
 
@@ -230,6 +262,26 @@ void RsbBH8Interface::LoopBlocking()
 			active = false;
 			break;
 		}
+		else if (command == "force_cut_off_update")
+		{
+			BOOST_LOG_TRIVIAL(info) << "----- force cut off update ----- \n";
+			command = "";
+			ft_cutoff_[0] = f_cut_off;
+			ft_cutoff_[1] = f_cut_off;
+			ft_cutoff_[2] = f_cut_off;
+			active = false;
+			break;
+		}
+		else if (command == "torque_cut_off_update")
+		{
+			BOOST_LOG_TRIVIAL(info) << "----- torque cut off update ----- \n";
+			command = "";
+			ft_cutoff_[3] = t_cut_off;
+			ft_cutoff_[4] = t_cut_off;
+			ft_cutoff_[5] = t_cut_off;
+			active = false;
+			break;
+		}
 
 		bh.RTGetFT(f, t);
 		//	printf("Force: %7.3f %7.3f %7.3f \n", f[0], f[1], f[2]);
@@ -237,27 +289,30 @@ void RsbBH8Interface::LoopBlocking()
 		//bh.RTGetA(a);     // get acceleration from the FT sensor
 		//printf("Acceleration %7.3f %7.3f %7.3f\n", a[0], a[1], a[2]);
 		//	usleep(microseconds);
-		forces->set_x(f[0]);
-		forces->set_y(f[1]);
-		forces->set_z(f[2]);
 
-		torques->set_a(t[0]);
-		torques->set_b(t[1]);
-		torques->set_c(t[2]);
+		// Butterworth the ft measurements
+		forces->set_x(this->ft_filters_[0]->eval(f[0]));
+		forces->set_y(this->ft_filters_[0]->eval(f[1]));
+		forces->set_z(this->ft_filters_[0]->eval(f[2]));
+
+		torques->set_a(this->ft_filters_[0]->eval(t[0]));
+		torques->set_b(this->ft_filters_[0]->eval(t[1]));
+		torques->set_c(this->ft_filters_[0]->eval(t[2]));
 		informer->publish(wrench);
 	}
 	BOOST_LOG_TRIVIAL(info) << "Exiting Loop.";
 }
 
-void RsbBH8Interface::SigHandler(int s) {
-           printf("Caught signal %d\n",s);
-           active=false;
+void RsbBH8Interface::SigHandler(int s)
+{
+	printf("Caught signal %d\n", s);
+	active = false;
 }
 
 std::function<void(int)> callback_wrapper;
 void callback_function(int value)
 {
-  callback_wrapper(value);
+	callback_wrapper(value);
 }
 
 int main(int argc, char *argv[])
@@ -298,14 +353,14 @@ int main(int argc, char *argv[])
 	hand.bh.RTUpdate();
 
 	callback_wrapper = std::bind(&RsbBH8Interface::SigHandler,
-                                 &hand,
-                                 std::placeholders::_1);
+															 &hand,
+															 std::placeholders::_1);
 
-    struct sigaction sigIntHandler;
-    sigIntHandler.sa_handler = callback_function;
-    sigemptyset(&sigIntHandler.sa_mask);
-    sigIntHandler.sa_flags = 0;
-    sigaction(SIGINT, &sigIntHandler, NULL);
+	struct sigaction sigIntHandler;
+	sigIntHandler.sa_handler = callback_function;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
+	sigaction(SIGINT, &sigIntHandler, NULL);
 
 	hand.LoopBlocking();
 
