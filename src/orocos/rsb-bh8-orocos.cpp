@@ -58,10 +58,11 @@ bool BarrettHandRTT::startHook()
 void BarrettHandRTT::updateHook()
 {
 	in_rsb_hand_converged_flow = in_rsb_hand_converged_port.read(in_rsb_hand_converged);
-	if (in_rsb_hand_converged_flow != RTT::NoData)
+	if (in_rsb_hand_converged_flow == RTT::NewData)
 	{
-		out_converged = in_rsb_hand_converged; // TODO not necessary!
+		out_converged = in_rsb_hand_converged;
 		out_converged_port.write(out_converged);
+		RTT::log(RTT::Info) << "[" << this->getName() << "] is " << (out_converged?"converged":"moving") << RTT::endlog();
 	}
 
 	in_rsb_hand_wrench_flow = in_rsb_hand_wrench_port.read(in_rsb_hand_wrench);

@@ -115,10 +115,30 @@ bool RsbBH8Interface::Initialize(std::string dev)
 
 bool RsbBH8Interface::PrepareRealTime()
 {
+	// bool LCV = true;          // loop control velocity
+	// int LCVC = LCVMultiplier; // loop control velocity coefficient
+	// bool LCPG = true;         // loop control proportional gain
+	// bool LCT = false;         // loop control torque
+
+	// bool LFV = true;          // loop feedback velocity
+	// int  LFVC = 1;            // loop feedback velocity coefficient
+	// bool LFS = false;         // loop feedback strain
+	// bool LFAP = true;         // loop feedback absolute position
+	// bool LFDP = false;        // loop feedback delta position
+	// int  LFDPC = 1;           // loop feedback delta position coefficient
+
+	// bool LFBP = false;        // loop feedback breakaway position not needed
+	// bool LFAIN = false;       // loop feedback analog inputs not needed
+	// bool LFDPD = false;       // loop feedback delta position discard not needed
+	// bool LFT = false;         // loop feedback temperature not needed
+
 	int result;
 	// initialize everything in velocity control mode
 	// aslo sets which sensors are read out each cycle
 	// see API/BHandSupervisoryRealTime.cpp
+
+	// RTSetFlags("123S", LCV, LCVC, LCPG, LCT, LFV, LFVC, LFS, LFAP, LFDP, LFDPC, LFBP, LFAIN, LFDPD, LFT)
+
 	if (result = bh.RTSetFlags("SG", 1, 3, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0))
 	{
 		Error(result);
@@ -280,7 +300,7 @@ bool RsbBH8Interface::InitializeRSB(std::string commandListenerScope, std::strin
 
 	informer = factory.createInformer<rst::dynamics::Wrench>(wrenchInformerScope);
 
-	informer_converged = factory.createInformer<bool>(wrenchInformerScope);
+	informer_converged = factory.createInformer<bool>(convergedInformerScope);
 
 	BOOST_LOG_TRIVIAL(info) << "Initializing RSB Interface... Done";
 	return true;
@@ -298,7 +318,12 @@ void RsbBH8Interface::LoopBlocking()
 
 	while (active)
 	{
-		if (command == "tare")
+		if (command == "initialize") {
+			BOOST_LOG_TRIVIAL(info) << "----- initializing connection -----\n";
+			command = "";
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(true)));
+		}
+		else if (command == "tare")
 		{
 			BOOST_LOG_TRIVIAL(info) << "----- taring -----\n";
 			command = "";
@@ -308,25 +333,33 @@ void RsbBH8Interface::LoopBlocking()
 		{
 			BOOST_LOG_TRIVIAL(info) << "----- opening -----\n";
 			command = "";
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(false)));
 			openGrasp();
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(true)));
 		}
 		else if (command == "close")
 		{
 			BOOST_LOG_TRIVIAL(info) << "----- closing hands -----\n";
 			command = "";
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(false)));
 			closeGrasp();
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(true)));
 		}
 		else if (command == "openspread")
 		{
 			BOOST_LOG_TRIVIAL(info) << "----- opening spread -----\n";
 			command = "";
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(false)));
 			closeSpread();
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(true)));
 		}
 		else if (command == "closespread")
 		{
 			BOOST_LOG_TRIVIAL(info) << "----- closing spread -----\n";
 			command = "";
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(false)));
 			closeSpread();
+			informer_converged->publish(boost::shared_ptr<bool>(new bool(true)));
 		}
 		else if (command == "deactivate")
 		{
@@ -357,6 +390,14 @@ void RsbBH8Interface::LoopBlocking()
 		}
 
 		bh.RTGetFT(f, t);
+
+		// for (unsigned int i = 0; i < 4; i++)
+		// {
+		// 	float actualVel = (float)bh.RTGetVelocity('1' + i);
+		// 	BOOST_LOG_TRIVIAL(info) << "actualVel 1" << i << " : "  << actualVel << "\n";
+		// }
+		// BOOST_LOG_TRIVIAL(info) << "\n\n\n";
+		
 		//	printf("Force: %7.3f %7.3f %7.3f \n", f[0], f[1], f[2]);
 		//	printf("Torque: %7.3f %7.3f %7.3f \n", t[0], t[1], t[2]);
 		//bh.RTGetA(a);     // get acceleration from the FT sensor
