@@ -1,0 +1,17 @@
+import("eigen_typekit")
+import("kdl_typekit")
+import("rst-rt_typekit")
+import("rtt_rsbcomm")
+
+
+import("RSBBH8HardwareIntegration")
+
+loadComponent("left_hand","cosima::BarrettHandRTT")
+setActivity("left_hand", 0.001, 10, ORO_SCHED_RT)
+
+left_hand.configure()
+
+stream("left_hand.in_rsb_hand_converged_port", rsb.transport.socket.scope("/bhand/left/converged"))
+stream("left_hand.in_rsb_hand_wrench_port", rsb.transport.socket.scope("/bhand/left/wrenches"))
+stream("left_hand.out_rsb_hand_command_port", rsb.transport.socket.scope("/bhand/left/command_rtt"))
+

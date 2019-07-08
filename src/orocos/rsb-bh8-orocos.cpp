@@ -27,6 +27,7 @@ BarrettHandRTT::BarrettHandRTT(const std::string &name) : TaskContext(name),
 	this->addOperation("close", &BarrettHandRTT::close, this, ClientThread);
 	this->addOperation("openSpread", &BarrettHandRTT::openSpread, this, ClientThread);
 	this->addOperation("closeSpread", &BarrettHandRTT::closeSpread, this, ClientThread);
+	this->addOperation("deactivate_danger", &BarrettHandRTT::deactivate_danger, this, ClientThread);
 
 	this->addOperation("scheduleZeroing", &BarrettHandRTT::scheduleZeroing, this, ClientThread).doc("Zeroing of the sensor is scheduled for the next update cycle from gazebo.");
 
