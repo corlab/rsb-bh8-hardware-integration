@@ -140,7 +140,7 @@ int RsbBH8Interface::ShuttingDown()
 	int result;
 	BOOST_LOG_TRIVIAL(info) << "Shutting down.";
 	if (result = bh.Command("GO")) // open all fingers
-		Error(result);							 //print error message
+		Error(result);			   //print error message
 
 	if (result = bh.Command("T")) // terminate all motors
 		Error(result);
@@ -164,6 +164,22 @@ void RsbBH8Interface::openGrasp()
 {
 	int result;
 	result = bh.Command("GO");
+	if (result)
+		Error(result);
+}
+
+void RsbBH8Interface::closeSpread()
+{
+	int result;
+	result = bh.Command("SC");
+	if (result)
+		Error(result);
+}
+
+void RsbBH8Interface::openSpread()
+{
+	int result;
+	result = bh.Command("SO");
 	if (result)
 		Error(result);
 }
@@ -206,12 +222,53 @@ void RsbBH8Interface::receiveCommands(boost::shared_ptr<std::string> e)
 	}
 }
 
-bool RsbBH8Interface::InitializeRSB(std::string commandListenerScope, std::string wrenchInformerScope)
+void RsbBH8Interface::receiveCommands_rtt(boost::shared_ptr<int> e)
+{
+	if (*e == 0)
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- initialize hand -----\n";
+		command = "initialize";
+	}
+	if (*e == 1)
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- opening hand -----\n";
+		command = "open";
+	}
+	else if (*e == 2)
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- closing hand -----\n";
+		command = "close";
+	}
+	else if (*e == 3)
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- opening spread -----\n";
+		command = "openspread";
+	}
+	else if (*e == 4)
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- closing spread -----\n";
+		command = "closespread";
+	}
+	else if (*e == 1337)
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- deactivate hand ----- \n";
+		command = "deactivate";
+	}
+	else if (*e == 5)
+	{
+		BOOST_LOG_TRIVIAL(info) << "----- taring F/T ----- \n";
+		command = "tare";
+	}
+}
+
+bool RsbBH8Interface::InitializeRSB(std::string commandListenerScope, std::string wrenchInformerScope, std::string convergedInformerScope)
 {
 	BOOST_LOG_TRIVIAL(info) << "Initializing RSB Interface...";
 
 	boost::shared_ptr<rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench> /* */> converter(new rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench>());
 	rsb::converter::converterRepository<std::string>()->registerConverter(converter);
+	rsb::converter::converterRepository<int>()->registerConverter(converter);
+	rsb::converter::converterRepository<bool>()->registerConverter(converter);
 
 	rsb::Factory &factory = rsb::getFactory();
 
@@ -219,7 +276,13 @@ bool RsbBH8Interface::InitializeRSB(std::string commandListenerScope, std::strin
 	listener = factory.createListener(scope);
 	listener->addHandler(rsb::HandlerPtr(new rsb::DataFunctionHandler<std::string>(boost::bind(&RsbBH8Interface::receiveCommands, this, _1))));
 
+	rsb::Scope scope_rtt(commandListenerScope + "_rtt");
+	listener_rtt = factory.createListener(scope_rtt);
+	listener_rtt->addHandler(rsb::HandlerPtr(new rsb::DataFunctionHandler<int>(boost::bind(&RsbBH8Interface::receiveCommands_rtt, this, _1))));
+
 	informer = factory.createInformer<rst::dynamics::Wrench>(wrenchInformerScope);
+
+	informer_converged = factory.createInformer<bool>(wrenchInformerScope);
 
 	BOOST_LOG_TRIVIAL(info) << "Initializing RSB Interface... Done";
 	return true;
@@ -254,6 +317,18 @@ void RsbBH8Interface::LoopBlocking()
 			BOOST_LOG_TRIVIAL(info) << "----- closing hands -----\n";
 			command = "";
 			closeGrasp();
+		}
+		else if (command == "openspread")
+		{
+			BOOST_LOG_TRIVIAL(info) << "----- opening spread -----\n";
+			command = "";
+			closeSpread();
+		}
+		else if (command == "closespread")
+		{
+			BOOST_LOG_TRIVIAL(info) << "----- closing spread -----\n";
+			command = "";
+			closeSpread();
 		}
 		else if (command == "deactivate")
 		{
@@ -317,9 +392,9 @@ void callback_function(int value)
 
 int main(int argc, char *argv[])
 {
-	if (argc < 4)
+	if (argc < 5)
 	{
-		std::cout << "usage: /scope/listener/cmd /scope/informer/wrench /dev/usb " << std::endl;
+		std::cout << "usage: /scope/listener/cmd /scope/informer/wrench /bhand/informer/converged /dev/usb " << std::endl;
 		return 1;
 	}
 	BOOST_LOG_TRIVIAL(info) << "Initializing BH8 Interface...";
@@ -327,7 +402,7 @@ int main(int argc, char *argv[])
 	RsbBH8Interface hand;
 
 	// initializes the hardware
-	if (!hand.Initialize(argv[3]))
+	if (!hand.Initialize(argv[4]))
 	{
 		// TODO deactivate hand or in destructor
 		return -1;
@@ -343,7 +418,8 @@ int main(int argc, char *argv[])
 
 	std::string listener_scope = (argc > 1) ? argv[1] : "/bhand/listener";
 	std::string informer_scope = (argc > 2) ? argv[2] : "/bhand/informer/wrench";
-	if (!hand.InitializeRSB(listener_scope, informer_scope))
+	std::string informer_converged_scope = (argc > 3) ? argv[3] : "/bhand/informer/converged";
+	if (!hand.InitializeRSB(listener_scope, informer_scope, informer_converged_scope))
 	{
 		// TODO deactivate hand or in destructor
 		return -1;
@@ -353,8 +429,8 @@ int main(int argc, char *argv[])
 	hand.bh.RTUpdate();
 
 	callback_wrapper = std::bind(&RsbBH8Interface::SigHandler,
-															 &hand,
-															 std::placeholders::_1);
+								 &hand,
+								 std::placeholders::_1);
 
 	struct sigaction sigIntHandler;
 	sigIntHandler.sa_handler = callback_function;

@@ -81,12 +81,15 @@ public:
      */
   bool Initialize(std::string dev);
   bool PrepareRealTime();
-  bool InitializeRSB(std::string commandListenerScope, std::string wrenchInformerScope);
+  bool InitializeRSB(std::string commandListenerScope, std::string wrenchInformerScope, std::string convergedInformerScope);
 
   int ShuttingDown();
   void closeGrasp();
   void openGrasp();
+  void closeSpread();
+  void openSpread();
   void receiveCommands(boost::shared_ptr<std::string> e);
+  void receiveCommands_rtt(boost::shared_ptr<int> e);
   void LoopBlocking();
   void SigHandler(int s);
 
@@ -112,8 +115,9 @@ private:
   const double rpc = 2. * M_PI / cts;   // radians per count
   const double cpr = cts / (2. * M_PI); // counts per radian
 
-  rsb::ListenerPtr listener;
+  rsb::ListenerPtr listener, listener_rtt;
   rsb::Informer<rst::dynamics::Wrench>::Ptr informer;
+  rsb::Informer<bool>::Ptr informer_converged;
   boost::shared_ptr<rst::dynamics::Wrench> wrench;
 
   std::atomic<bool> active;
