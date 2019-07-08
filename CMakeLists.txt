@@ -94,7 +94,7 @@ if (OROCOS-RTT_FOUND)
   include_directories(BEFORE SYSTEM
     src/orocos
   )
-  orocos_component(spacenav-orocos "src/orocos/rsb-bh8-orocos.cpp")
+  orocos_component(${BINARY_NAME_OROCOS} "src/orocos/rsb-bh8-orocos.cpp")
 
   set_target_properties(${BINARY_NAME_OROCOS} PROPERTIES COMPILE_DEFINITIONS RTT_COMPONENT)
 

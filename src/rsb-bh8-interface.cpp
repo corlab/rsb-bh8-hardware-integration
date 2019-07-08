@@ -267,8 +267,6 @@ bool RsbBH8Interface::InitializeRSB(std::string commandListenerScope, std::strin
 
 	boost::shared_ptr<rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench> /* */> converter(new rsb::converter::ProtocolBufferConverter<rst::dynamics::Wrench>());
 	rsb::converter::converterRepository<std::string>()->registerConverter(converter);
-	rsb::converter::converterRepository<int>()->registerConverter(converter);
-	rsb::converter::converterRepository<bool>()->registerConverter(converter);
 
 	rsb::Factory &factory = rsb::getFactory();
 
