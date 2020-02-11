@@ -239,6 +239,10 @@ void RsbBH8Interface::receiveCommands(boost::shared_ptr<std::string> e)
 		std::string value = (*e).substr(10, (*e).size() - 1);
 		t_cut_off = stod(value);
 		command = "torque_cut_off_update";
+	} else {
+		// EXECUTE DIRECTLY
+		BOOST_LOG_TRIVIAL(info) << "----- DEBUG execute directly -----\n";
+		command = *e;
 	}
 }
 
@@ -387,7 +391,16 @@ void RsbBH8Interface::LoopBlocking()
 			ft_cutoff_[5] = t_cut_off;
 			active = false;
 			break;
+		} else {
+			// EXECUTE DIRECTLY DEBUG
+			BOOST_LOG_TRIVIAL(info) << "----- execute directly debug: " << command << " ----- \n";
+			result = bh.Command(command);
+			command = "";
+			break;
 		}
+
+		// TODO check if this is needed here!
+		bh.RTUpdate();
 
 		bh.RTGetFT(f, t);
 
